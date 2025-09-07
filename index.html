@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Pixel Clock — 25×25 grid, synced minute tick + multiply #222 hands</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root{
+    --grid: 25;
+    --tick: #222;   /* tick ring */
+    --ink:  #ccc;   /* hour + minute color per request */
+    --sec:  #f00;   /* seconds (red) */
+    --bg:   #000;
+  }
+  .px+.fillHour {  background: #fff }
+  html, body { margin:0; height:100%; background:var(--bg); overflow:hidden; }
+  .viewport { position:relative; width:100vw; height:100vh; display:grid; place-items:center; }
+  .stage { position:relative; width:100vh; height:100vh; }
+
+  /* Each layer is a grid of vh-sized cells so the square keys off height */
+  .layer{
+    position:absolute; inset:0; display:grid; pointer-events:none;
+    grid-template-columns:repeat(var(--grid), calc(100vh / var(--grid)));
+    grid-template-rows:   repeat(var(--grid), calc(100vh / var(--grid)));
+  }
+
+  /* Multiply blend on BOTH the hands and seconds as requested */
+  .layer.hands   { mix-blend-mode: normal;  z-index: 2}
+  .layer.seconds { mix-blend-mode: normal; }
+
+  .px{ background:transparent; }
+  .tick{ background:var(--tick); }
+  .fill{ background:var(--ink); }      /* minute */
+  .fillHour{ background:var(--ink); }  /* hour (half length) */
+  .sec{ background:var(--sec); }       /* seconds (filled red) */
+
+  *{ user-select:none; -webkit-user-select:none; }
+</style>
+</head>
+<body>
+  <div class="viewport">
+    <div class="stage">
+      <div id="ticks"   class="layer"></div>
+      <div id="hands"   class="layer hands"></div>
+      <div id="seconds" class="layer seconds"></div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const G  = 25;
+  const CX = Math.floor(G/2), CY = Math.floor(G/2);
+  const PAD = 1;
+  const MAXR = Math.floor(G/2) - PAD;
+
+  const elTicks   = document.getElementById('ticks');
+  const elHands   = document.getElementById('hands');
+  const elSeconds = document.getElementById('seconds');
+
+  // Build layered grids (one div per cell)
+  const mkCells = (container) => {
+    const arr = [];
+    for (let y=0;y<G;y++){
+      for (let x=0;x<G;x++){
+        const d = document.createElement('div');
+        d.className = 'px';
+        container.appendChild(d);
+        arr.push(d);
+      }
+    }
+    return arr;
+  };
+  const ticksCells   = mkCells(elTicks);
+  const handsCells   = mkCells(elHands);
+  const secondsCells = mkCells(elSeconds);
+  const idx = (x,y)=> y*G + x;
+
+  // Bresenham line over integer grid
+  function lineCells(x0,y0,x1,y1){
+    const out=[];
+    let dx=Math.abs(x1-x0), sx=x0<x1?1:-1;
+    let dy=-Math.abs(y1-y0), sy=y0<y1?1:-1;
+    let err=dx+dy, e2;
+    for(;;){
+      out.push([x0,y0]);
+      if(x0===x1 && y0===y1) break;
+      e2=2*err;
+      if(e2>=dy){ err+=dy; x0+=sx; }
+      if(e2<=dx){ err+=dx; y0+=sy; }
+    }
+    return out;
+  }
+
+  // Polar (0 at 12 o’clock) → grid coordinate
+  function polar(theta, r){
+    const gx = CX + Math.round(Math.sin(theta) * r);
+    const gy = CY - Math.round(Math.cos(theta) * r);
+    return [gx, gy];
+  }
+
+  // Static 12 ticks (#666)
+  (function drawTicks(){
+    for(let k=0;k<12;k++){
+      const [tx,ty] = polar((Math.PI*2)*(k/12), MAXR);
+      if(tx>=0&&tx<G&&ty>=0&&ty<G) ticksCells[idx(tx,ty)].className = 'px tick';
+    }
+  })();
+
+  function clearHands(){ for(const d of handsCells)   d.className = 'px'; }
+  function clearSeconds(){ for(const d of secondsCells) d.className = 'px'; }
+
+  // Draw hour + minute (minute updates at exact second zero; hour is fractional with minutes)
+  function drawHands(){
+    clearHands();
+    const now = new Date();
+    const m   = now.getMinutes();
+    const hr  = now.getHours()%12;
+
+    const minAng  = (Math.PI*2)*(m/60);            // minute hand jumps per minute
+    const hourAng = (Math.PI*2)*((hr + m/60)/12);  // hour hand advances fractionally with minutes
+
+    const minLen  = MAXR;                           // reaches tick ring (same as seconds)
+    const hourLen = Math.max(2, Math.round(MAXR*0.5));
+
+    const [mx,my] = polar(minAng,  minLen);
+    const [hx,hy] = polar(hourAng, hourLen);
+
+    for(const [x,y] of lineCells(CX,CY,mx,my)){
+      if(x>=0&&x<G&&y>=0&&y<G) handsCells[idx(x,y)].className = 'px fill';
+    }
+    for(const [x,y] of lineCells(CX,CY,hx,hy)){
+      if(x>=0&&x<G&&y>=0&&y<G) handsCells[idx(x,y)].className = 'px fillHour';
+    }
+  }
+
+  // Continuous seconds with milliseconds
+  function drawSeconds(){
+    clearSeconds();
+    const now = new Date();
+    const s = now.getSeconds() + now.getMilliseconds()/1000;
+    const secAng = (Math.PI*2)*(s/60);
+    const secLen = MAXR;
+
+    for(const [x,y] of lineCells(CX,CY,...polar(secAng, secLen))){
+      if(x>=0&&x<G&&y>=0&&y<G) secondsCells[idx(x,y)].className = 'px sec';
+    }
+  }
+
+  // rAF loop for seconds
+  function loopSeconds(){
+    drawSeconds();
+    requestAnimationFrame(loopSeconds);
+  }
+
+  /**
+   * Minute/Hour syncing:
+   * Instead of setInterval(1000) (which drifts), we schedule the next tick
+   * precisely at the upcoming second boundary using setTimeout with a
+   * recalculated delay each time. This keeps the minute jump aligned to
+   * the second-hand hitting zero.
+   */
+  function scheduleHandsTick(){
+    const now = new Date();
+    const msToNext = 1000 - (now.getMilliseconds() % 1000);
+    // Draw just after the boundary to ensure seconds have rolled to 0
+    setTimeout(() => {
+      drawHands();
+      scheduleHandsTick(); // recurse for the next boundary
+    }, msToNext + 1); // +1ms guard avoids pre-boundary firing on some browsers
+  }
+
+  function start(){
+    drawHands();          // initial draw
+    loopSeconds();        // start continuous seconds
+    scheduleHandsTick();  // start precise per-second scheduling (min/hour)
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>
