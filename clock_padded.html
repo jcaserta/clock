@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Smooth Orbital Number Clock</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: black;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont,
+        "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    .clock {
+      position: relative;
+      width: 100vmin;
+      aspect-ratio: 1 / 1;
+      border-radius:50%;
+    }
+
+    .number {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-weight: 500;
+      font-size: clamp(2rem, 16vmin, 18rem);
+      user-select: none;
+      pointer-events: none;
+      line-height: 1;
+    }
+
+    .number.hour {
+      color: #fff;
+    }
+
+    .number.minute {
+      color: #777777;
+    }
+
+    .number.second {
+      color: #c00000;
+    }
+  </style>
+</head>
+<body>
+  <div class="clock" id="clock">
+    <div class="number hour" id="hour-number"></div>
+    <div class="number minute" id="minute-number"></div>
+    <div class="number second" id="second-number"></div>
+  </div>
+
+  <script>
+    const clockEl = document.getElementById("clock");
+    const hourEl = document.getElementById("hour-number");
+    const minuteEl = document.getElementById("minute-number");
+    const secondEl = document.getElementById("second-number");
+
+    function setPosition(el, angle, radius) {
+      const x = radius * Math.cos(angle);
+      const y = radius * Math.sin(angle);
+      el.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+    }
+
+    function updateClock() {
+      const now = new Date();
+      const h24 = now.getHours();
+      const m = now.getMinutes();
+      const s = now.getSeconds();
+      const ms = now.getMilliseconds();
+
+      const h12 = h24 % 12 || 12;
+
+      const secExact = s + ms / 1000;
+      const minExact = m + secExact / 60;
+      const hourExact = (h24 % 12) + minExact / 60;
+
+      const tau = Math.PI * 2;
+
+      const secondAngle = (secExact / 60) * tau - Math.PI / 2;
+      const minuteAngle = (minExact / 60) * tau - Math.PI / 2;
+      const hourAngle = (hourExact / 12) * tau - Math.PI / 2;
+
+      const rect = clockEl.getBoundingClientRect();
+      const outerRadius = rect.width * 0.42;
+      const innerRadius = rect.width * 0.21;
+
+      hourEl.textContent = h12;
+      minuteEl.textContent = String(Math.floor(minExact)).padStart(2, "0");
+      secondEl.textContent = String(Math.floor(secExact)).padStart(2, "0");
+
+      setPosition(hourEl, hourAngle, innerRadius);
+      setPosition(minuteEl, minuteAngle, outerRadius);
+      setPosition(secondEl, secondAngle, outerRadius);
+
+      requestAnimationFrame(updateClock);
+    }
+
+    requestAnimationFrame(updateClock);
+  </script>
+</body>
+</html>
