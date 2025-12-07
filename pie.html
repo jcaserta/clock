@@ -14,9 +14,8 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      background: #ffffff;
+      background: #ddd; /* page background */
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background:#ddd;
     }
 
     .clock-container {
@@ -30,31 +29,48 @@
       overflow: visible;
     }
 
-    /* Wedges blend */
+    /* Wedges: normal blend, semi-transparent so overlaps make new colors */
     .slice {
-      mix-blend-mode: multiply;
+      /* no mix-blend-mode here */
     }
 
-    /* Pure RGB wedges */
-    #hoursSlice   { fill: #0000ff; }
-    #minutesSlice { fill: #00ff00; }
-    #secondsSlice { fill: #ff0000; }
+    /* Pure-ish RGB with some transparency */
+    #hoursSlice {
+      fill: #0000ff;      /* blue */
+      fill-opacity: 0.55;
+    }
+    #minutesSlice {
+      fill: #00ff00;      /* green */
+      fill-opacity: 0.55;
+    }
+    #secondsSlice {
+      fill: #ff0000;      /* red */
+      fill-opacity: 0.55;
+    }
 
-    /* Numbers now ALSO blend */
     text {
-      font-size: 15px;
-      text-anchor: middle;
-      dominant-baseline: middle;
-      pointer-events: none;
-      mix-blend-mode: multiply;   /* ✅ key change */
+    font-size: 12px;        /* slightly smaller */
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+    fill: #000000;         /* all numbers now black */
     }
 
-    #hoursLabel   { fill: #0000ff; }
-    #minutesLabel { fill: #00ff00; }
-    #secondsLabel { fill: #ff0000; }
+    #hoursLabel   { fill: #000; }
+#minutesLabel { fill: #000; }
+#secondsLabel { fill: #000; }
 
+    /* Chart background is white */
     #backgroundCircle {
-      fill: #fff;
+      fill: #ffffff;
+    }
+
+    /* Foreground white divider lines on top of wedges */
+    .divider {
+      stroke: #ffffff;
+      stroke-width: 0.75;  /* thinner as requested */
+      stroke-linecap: round;
+      pointer-events: none;
     }
   </style>
 </head>
@@ -63,13 +79,18 @@
     <svg viewBox="0 0 200 200">
       <g id="pie" transform="translate(100,100)">
 
-        <!-- Background disk -->
+        <!-- White chart background -->
         <circle id="backgroundCircle" r="80"></circle>
 
         <!-- Wedges -->
         <path id="hoursSlice" class="slice"></path>
         <path id="minutesSlice" class="slice"></path>
         <path id="secondsSlice" class="slice"></path>
+
+        <!-- Foreground divider lines (always on top) -->
+        <line id="hourLine"   class="divider"></line>
+        <line id="minuteLine" class="divider"></line>
+        <line id="secondLine" class="divider"></line>
 
         <!-- Outside numbers -->
         <text id="hoursLabel"></text>
@@ -87,6 +108,10 @@
     const hoursSlice   = document.getElementById("hoursSlice");
     const minutesSlice = document.getElementById("minutesSlice");
     const secondsSlice = document.getElementById("secondsSlice");
+
+    const hourLine   = document.getElementById("hourLine");
+    const minuteLine = document.getElementById("minuteLine");
+    const secondLine = document.getElementById("secondLine");
 
     const hoursLabel   = document.getElementById("hoursLabel");
     const minutesLabel = document.getElementById("minutesLabel");
@@ -119,6 +144,15 @@
       label.setAttribute("y", y);
     }
 
+    function placeLine(line, endAngle, r) {
+      const x = r * Math.cos(endAngle);
+      const y = r * Math.sin(endAngle);
+      line.setAttribute("x1", 0);
+      line.setAttribute("y1", 0);
+      line.setAttribute("x2", x);
+      line.setAttribute("y2", y);
+    }
+
     function updateClock() {
       const now = new Date();
       const h24 = now.getHours();
@@ -131,7 +165,7 @@
       const hoursFraction =
         (rawHour12 + m / 60 + s / 3600) / 12;
       const minutesFraction = (m + s / 60) / 60;
-      const secondsFraction = s / 60;
+      const secondsFraction = s / 60; // ticking seconds
 
       const baseAngle = -Math.PI / 2;
 
@@ -143,11 +177,15 @@
       minutesSlice.setAttribute("d", sectorPath(baseAngle, mEnd, radius));
       secondsSlice.setAttribute("d", sectorPath(baseAngle, sEnd, radius));
 
+      placeLine(hourLine,   hEnd, radius);
+      placeLine(minuteLine, mEnd, radius);
+      placeLine(secondLine, sEnd, radius);
+
       placeLabel(hoursLabel,   hEnd, radius);
       placeLabel(minutesLabel, mEnd, radius);
       placeLabel(secondsLabel, sEnd, radius);
 
-      hoursLabel.textContent   = hourBase;
+      hoursLabel.textContent   = hourBase;                 // no leading 0
       minutesLabel.textContent = String(m).padStart(2, "0");
       secondsLabel.textContent = String(s).padStart(2, "0");
 
