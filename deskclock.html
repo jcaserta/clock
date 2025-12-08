@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rectangle Retro Clock</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #d9c9a9; /* warm background similar to photo */
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .clock-wrapper {
+      width: min(70vmin, 90vw);
+      aspect-ratio: 3 / 2;
+    }
+
+    svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .frame {
+      fill: #6b4a30;       /* brown frame */
+    }
+
+    .face {
+      fill: #f8f0da;       /* warm off-white face */
+      stroke: #b89a6a;
+      stroke-width: 4;
+    }
+
+    .number {
+      font-size: 20px;
+      text-anchor: middle;
+      dominant-baseline: middle;
+      fill: #43362c;
+    }
+
+    .hand-hour {
+      stroke: #43362c;
+      stroke-width: 4.5;
+      stroke-linecap: round;
+    }
+
+    .hand-minute {
+      stroke: #43362c;
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+
+    .hand-second {
+      stroke: #a4382e;
+      stroke-width: 2;
+      stroke-linecap: round;
+    }
+
+    .center-dot {
+      fill: #43362c;
+    }
+  </style>
+</head>
+<body>
+  <div class="clock-wrapper">
+    <svg viewBox="0 0 300 200">
+      <!-- outer frame -->
+      <rect x="5" y="10" width="290" height="180" rx="6" ry="6" class="frame" />
+
+      <!-- inner face -->
+      <rect x="25" y="25" width="250" height="150" rx="4" ry="4" class="face" />
+
+      <!-- group for dial & hands -->
+      <g id="dial" transform="translate(150,100)">
+        <!-- numbers will be positioned by JS into this group -->
+        <g id="numbers"></g>
+
+        <!-- hands, all centered at 0,0 so rotate() works around center -->
+        <line id="hourHand"   class="hand-hour"   x1="0" y1="8"  x2="0" y2="-40" />
+        <line id="minuteHand" class="hand-minute" x1="0" y1="10" x2="0" y2="-55" />
+        <line id="secondHand" class="hand-second" x1="0" y1="12" x2="0" y2="-65" />
+
+        <!-- center hub -->
+        <circle r="4" class="center-dot" />
+      </g>
+    </svg>
+  </div>
+
+  <script>
+    // ----- Place the numbers in an oval, like the photo -----
+    (function placeNumbers() {
+      const numbersGroup = document.getElementById("numbers");
+      const rx = 80;  // horizontal radius
+      const ry = 55;  // vertical radius (slightly squashed circle)
+      for (let n = 1; n <= 12; n++) {
+        const angle = (n - 3) * (Math.PI / 6); // 3 o'clock at 0 rad
+        const x = rx * Math.cos(angle);
+        const y = ry * Math.sin(angle);
+        const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        t.setAttribute("x", x);
+        t.setAttribute("y", y);
+        t.setAttribute("class", "number");
+        t.textContent = n;
+        numbersGroup.appendChild(t);
+      }
+    })();
+
+    // ----- Clock logic -----
+    const hourHand   = document.getElementById("hourHand");
+    const minuteHand = document.getElementById("minuteHand");
+    const secondHand = document.getElementById("secondHand");
+
+    function updateClock() {
+      const now = new Date();
+      const seconds = now.getSeconds();
+      const minutes = now.getMinutes();
+      const hours   = now.getHours();
+
+      const secAngle  = seconds * 6;                        // 360 / 60
+      const minAngle  = minutes * 6 + seconds * 0.1;        // 360/60 + progress
+      const hourAngle = (hours % 12) * 30 + minutes * 0.5;  // 360/12 + progress
+
+      hourHand.setAttribute("transform",  `rotate(${hourAngle})`);
+      minuteHand.setAttribute("transform",`rotate(${minAngle})`);
+      secondHand.setAttribute("transform",`rotate(${secAngle})`);
+    }
+
+    updateClock();
+    setInterval(updateClock, 1000);
+  </script>
+</body>
+</html>

@@ -36,29 +36,30 @@
 
     /* Pure-ish RGB with some transparency */
     #hoursSlice {
-      fill: #0000ff;      /* blue */
-      fill-opacity: 0.55;
+      fill: #1138e6;      /* blue */
+      fill-opacity: 0.6;
     }
     #minutesSlice {
-      fill: #00ff00;      /* green */
-      fill-opacity: 0.55;
+      fill: #f205c3;      /* red */
+      fill-opacity: 0.6;
     }
     #secondsSlice {
-      fill: #ff0000;      /* red */
-      fill-opacity: 0.55;
+      fill: #fbee00;      /* green */
+      fill-opacity: 0.5;
+      mix-blend-mode: multiply;
     }
 
     text {
-    font-size: 12px;        /* slightly smaller */
-    text-anchor: middle;
-    dominant-baseline: middle;
-    pointer-events: none;
-    fill: #000000;         /* all numbers now black */
+      font-size: 12px;        /* slightly smaller */
+      text-anchor: middle;
+      dominant-baseline: middle;
+      pointer-events: none;
+      fill: #000000;          /* all numbers now black */
     }
 
     #hoursLabel   { fill: #000; }
-#minutesLabel { fill: #000; }
-#secondsLabel { fill: #000; }
+    #minutesLabel { fill: #000; }
+    #secondsLabel { fill: #000; }
 
     /* Chart background is white */
     #backgroundCircle {
@@ -162,10 +163,10 @@
       const rawHour12 = h24 % 12;
       const hourBase = rawHour12 === 0 ? 12 : rawHour12;
 
-      const hoursFraction =
-        (rawHour12 + m / 60 + s / 3600) / 12;
-      const minutesFraction = (m + s / 60) / 60;
-      const secondsFraction = s / 60; // ticking seconds
+      // *** CHANGED: discrete hours & minutes (no fractional movement) ***
+      const hoursFraction   = rawHour12 / 12;  // jumps only when hour changes
+      const minutesFraction = m / 60;          // jumps only when minute changes
+      const secondsFraction = s / 60;          // still ticks every second
 
       const baseAngle = -Math.PI / 2;
 
