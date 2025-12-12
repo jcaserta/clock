@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Time elapsed</title>
+  <style>
+    :root{
+      --page-bg: #ddd;
+
+      /* Wedge colors */
+      --hours:   cyan;
+      --minutes: magenta;
+      --seconds: yellow;
+
+      /* Opacities (must match pie + legend) */
+      --a-hours:   0.50;
+      --a-minutes: 0.50;
+      --a-seconds: 0.50;
+
+      --title-blue: #2b55ff;
+    }
+
+    html, body { height: 100%; margin: 0; }
+
+    body{
+      background: var(--page-bg);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      align-items: start;
+    }
+
+    .topbar{
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      padding: 40px 48px 0 48px;
+      box-sizing: border-box;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .topbar * { pointer-events: auto; }
+
+    h1{
+      margin: 0;
+      font-weight: 500;
+      font-size: clamp(24px, 2.6vw, 52px);
+      color: var(--title-blue);
+    }
+
+    .legend{
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      justify-items: start;
+      padding-top: 8px;
+      user-select: none;
+    }
+
+    .legend-item{
+      display: grid;
+      grid-template-columns: 22px auto;
+      gap: 10px;
+      align-items: center;
+      font-size: clamp(12px, 1.1vw, 18px);
+      color: #111;
+      white-space: nowrap;
+    }
+
+    /* Mini swatches rendered as SVG so they match the pie’s compositing */
+    .swatch{
+      width: 18px;
+      height: 18px;
+      border-radius: 3px;
+      overflow: hidden;
+      border: 1px solid rgba(0,0,0,0.18);
+      box-sizing: border-box;
+      background: #fff;
+    }
+    .swatch svg{ width:100%; height:100%; display:block; }
+
+    /* Center the clock in the viewport */
+    .center{
+      display: grid;
+      position: fixed;
+      inset: 0;
+      place-items: center;
+      z-index: 1;
+    }
+
+    .clock-container{
+      width: min(70vmin, 720px);
+      aspect-ratio: 1 / 1;
+    }
+
+    svg#clock{
+      width: 100%;
+      height: 100%;
+      display: block;
+      overflow: visible;
+    }
+
+    #backgroundCircle{ fill: #fff; }
+
+    #hoursSlice   { fill: var(--hours);   fill-opacity: var(--a-hours); }
+    #minutesSlice { fill: var(--minutes); fill-opacity: var(--a-minutes); }
+    #secondsSlice { fill: var(--seconds); fill-opacity: var(--a-seconds); }
+
+    .divider{
+      stroke: #fff;
+      stroke-width: 0.75;
+      stroke-linecap: round;
+      pointer-events: none;
+    }
+
+    text{
+      font-size: 12px;
+      display:none;
+      text-anchor: middle;
+      dominant-baseline: middle;
+      pointer-events: none;
+      fill: #000;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="topbar">
+    <h1 id="pageTitle">Time elapsed today</h1>
+
+    <!-- ✅ Accurate legend: swatches are built using the SAME alpha stacking as the clock -->
+    <div class="legend" aria-label="legend">
+      <!-- White -->
+      <div class="legend-item">
+        <span class="swatch">
+          <svg viewBox="0 0 18 18">
+            <rect width="18" height="18" fill="#fff"/>
+          </svg>
+        </span>
+        <span>Not yet elapsed</span>
+      </div>
+
+      <!-- Singles -->
+      <div class="legend-item">
+        <span class="swatch">
+          <svg viewBox="0 0 18 18">
+            <rect width="18" height="18" fill="#fff"/>
+            <rect width="18" height="18" fill="cyan" fill-opacity="0.50"/>
+          </svg>
+        </span>
+        <span>Hours elapsed</span>
+      </div>
+
+      <div class="legend-item">
+        <span class="swatch">
+          <svg viewBox="0 0 18 18">
+            <rect width="18" height="18" fill="#fff"/>
+            <rect width="18" height="18" fill="magenta" fill-opacity="0.50"/>
+          </svg>
+        </span>
+        <span>Minutes elapsed</span>
+      </div>
+
+      <div class="legend-item">
+        <span class="swatch">
+          <svg viewBox="0 0 18 18">
+            <rect width="18" height="18" fill="#fff"/>
+            <rect width="18" height="18" fill="yellow" fill-opacity="0.50"/>
+          </svg>
+        </span>
+        <span>Seconds elapsed</span>
+      </div>
+
+      <!-- Overlaps (same order as pie draws: hours, then minutes, then seconds) -->
+      <div class="legend-item">
+        <span class="swatch">
+          <svg viewBox="0 0 18 18">
+            <rect width="18" height="18" fill="#fff"/>
+            <rect width="18" height="18" fill="cyan" fill-opacity="0.50"/>
+            <rect width="18" height="18" fill="magenta" fill-opacity="0.50"/>
+          </svg>
+        </span>
+        <span>Hours + Minutes</span>
+      </div>
+
+      <div class="legend-item">
+        <span class="swatch">
+          <svg viewBox="0 0 18 18">
+            <rect width="18" height="18" fill="#fff"/>
+            <rect width="18" height="18" fill="cyan" fill-opacity="0.50"/>
+            <rect width="18" height="18" fill="yellow" fill-opacity="0.50"/>
+          </svg>
+        </span>
+        <span>Hours + Seconds</span>
+      </div>
+
+      <div class="legend-item">
+        <span class="swatch">
+          <svg viewBox="0 0 18 18">
+            <rect width="18" height="18" fill="#fff"/>
+            <rect width="18" height="18" fill="magenta" fill-opacity="0.50"/>
+            <rect width="18" height="18" fill="yellow" fill-opacity="0.50"/>
+          </svg>
+        </span>
+        <span>Minutes + Seconds</span>
+      </div>
+
+      <div class="legend-item">
+        <span class="swatch">
+          <svg viewBox="0 0 18 18">
+            <rect width="18" height="18" fill="#fff"/>
+            <rect width="18" height="18" fill="cyan" fill-opacity="0.50"/>
+            <rect width="18" height="18" fill="magenta" fill-opacity="0.50"/>
+            <rect width="18" height="18" fill="yellow" fill-opacity="0.50"/>
+          </svg>
+        </span>
+        <span>Hours + Minutes + Seconds</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="center">
+    <div class="clock-container">
+      <svg id="clock" viewBox="0 0 200 200" role="img" aria-label="time elapsed clock">
+        <g transform="translate(100,100)">
+          <circle id="backgroundCircle" r="80"></circle>
+
+          <path id="hoursSlice"></path>
+          <path id="minutesSlice"></path>
+          <path id="secondsSlice"></path>
+
+          <line id="hourLine" class="divider"></line>
+          <line id="minuteLine" class="divider"></line>
+          <line id="secondLine" class="divider"></line>
+
+          <text id="hoursLabel"></text>
+          <text id="minutesLabel"></text>
+          <text id="secondsLabel"></text>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <script>
+    const titleEl = document.getElementById("pageTitle");
+
+    const radius = 80;
+
+    // labels outside the pie, centered on each wedge (mid-angle)
+    const labelDistanceOutside = 1.12;
+
+    const hoursSlice   = document.getElementById("hoursSlice");
+    const minutesSlice = document.getElementById("minutesSlice");
+    const secondsSlice = document.getElementById("secondsSlice");
+
+    const hourLine   = document.getElementById("hourLine");
+    const minuteLine = document.getElementById("minuteLine");
+    const secondLine = document.getElementById("secondLine");
+
+    const hoursLabel   = document.getElementById("hoursLabel");
+    const minutesLabel = document.getElementById("minutesLabel");
+    const secondsLabel = document.getElementById("secondsLabel");
+
+    function updateTitle(now) {
+      const isAM = now.getHours() < 12;
+      const label = isAM ? "Time elapsed this morning" : "Time elapsed this evening";
+      titleEl.textContent = label;
+      document.title = label;
+    }
+
+    function sectorPath(startAngle, endAngle, r) {
+      const sweep = endAngle - startAngle;
+      if (Math.abs(sweep) < 0.0001) return "";
+      const largeArc = sweep > Math.PI ? 1 : 0;
+
+      const x1 = r * Math.cos(startAngle);
+      const y1 = r * Math.sin(startAngle);
+      const x2 = r * Math.cos(endAngle);
+      const y2 = r * Math.sin(endAngle);
+
+      return `M 0 0 L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+    }
+
+    function placeLine(line, endAngle, r) {
+      line.setAttribute("x1", 0);
+      line.setAttribute("y1", 0);
+      line.setAttribute("x2", r * Math.cos(endAngle));
+      line.setAttribute("y2", r * Math.sin(endAngle));
+    }
+
+    function placeLabelOnWedgeOutside(label, startAngle, endAngle, r) {
+      const mid = (startAngle + endAngle) / 2;
+      const rr = r * labelDistanceOutside;
+      label.setAttribute("x", rr * Math.cos(mid));
+      label.setAttribute("y", rr * Math.sin(mid));
+    }
+
+    function updateClock() {
+      const now = new Date();
+      updateTitle(now);
+
+      const h24 = now.getHours();
+      const m = now.getMinutes();
+      const s = now.getSeconds();
+
+      const rawHour12 = h24 % 12;
+      const hourBase = rawHour12 === 0 ? 12 : rawHour12;
+
+      // Discrete wedges: jump only on integer changes
+      const hoursFraction   = rawHour12 / 12;
+      const minutesFraction = m / 60;
+      const secondsFraction = s / 60;
+
+      const baseAngle = -Math.PI / 2;
+
+      const hEnd = baseAngle + hoursFraction   * Math.PI * 2;
+      const mEnd = baseAngle + minutesFraction * Math.PI * 2;
+      const sEnd = baseAngle + secondsFraction * Math.PI * 2;
+
+      hoursSlice.setAttribute("d", sectorPath(baseAngle, hEnd, radius));
+      minutesSlice.setAttribute("d", sectorPath(baseAngle, mEnd, radius));
+      secondsSlice.setAttribute("d", sectorPath(baseAngle, sEnd, radius));
+
+      placeLine(hourLine, hEnd, radius);
+      placeLine(minuteLine, mEnd, radius);
+      placeLine(secondLine, sEnd, radius);
+
+      placeLabelOnWedgeOutside(hoursLabel,   baseAngle, hEnd, radius);
+      placeLabelOnWedgeOutside(minutesLabel, baseAngle, mEnd, radius);
+      placeLabelOnWedgeOutside(secondsLabel, baseAngle, sEnd, radius);
+
+      hoursLabel.textContent   = hourBase;
+      minutesLabel.textContent = String(m).padStart(2, "0");
+      secondsLabel.textContent = String(s).padStart(2, "0");
+
+      requestAnimationFrame(updateClock);
+    }
+
+    updateClock();
+  </script>
+</body>
+</html>
