@@ -2,192 +2,106 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Time elapsed today</title>
+  <title>RGB Pie Clock</title>
   <style>
-    :root{
-      --page-bg: #ddd;
-      --slide-bg: #f7f7f7;
-      --slide-border: #bfbfbf;
-
-      --title-blue: #2b55ff;
-
-      /* clock colors (CMY) */
-      --c-hours:   cyan;
-      --c-minutes: magenta;
-      --c-seconds: yellow;
-
-      /* overlap colors (CMY theory) */
-      --c-hm:  #0000ff; /* cyan + magenta = blue */
-      --c-hs:  #00aa00; /* cyan + yellow = green (slightly deepened) */
-      --c-ms:  #ff0000; /* magenta + yellow = red */
-      --c-hms: #000000; /* all three = black */
-    }
-
     html, body {
       margin: 0;
+      padding: 0;
       height: 100%;
     }
 
-    body{
-      background: var(--page-bg);
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      display: grid;
-      place-items: center;
-    }
-
-    /* 16:9 "slide" that always fits viewport */
-    .slide{
-      width: min(96vw, 1400px);
-      aspect-ratio: 16 / 9;
-      background: var(--slide-bg);
-      border: 1px solid var(--slide-border);
-      box-sizing: border-box;
-      padding: 44px 52px 40px 52px; /* mimic slide margins */
-      display: grid;
-      grid-template-rows: auto 1fr auto;
-      gap: 18px;
-    }
-
-    .topbar{
-      display: grid;
-      grid-template-columns: 1fr auto;
-      align-items: start;
-      gap: 24px;
-    }
-
-    .title{
-      margin: 0;
-      font-weight: 500;
-      font-size: clamp(22px, 2.2vw, 44px);
-      color: var(--title-blue);
-      letter-spacing: 0.2px;
-    }
-
-    .legend{
-      display: grid;
-      gap: 10px;
-      justify-items: start;
-      align-content: start;
-      padding-top: 6px;
-    }
-
-    .legend-item{
-      display: grid;
-      grid-template-columns: 18px auto;
-      gap: 10px;
+    body {
+      display: flex;
+      justify-content: center;
       align-items: center;
-      font-size: clamp(12px, 1.1vw, 18px);
-      color: #111;
-      white-space: nowrap;
+      background: #ddd; /* page background */
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
-    .swatch{
-      width: 18px;
-      height: 18px;
-      border-radius: 3px;
-      border: 1px solid rgba(0,0,0,0.15);
-      box-sizing: border-box;
-    }
-
-    .content{
-      display: grid;
-      place-items: center;
-      min-height: 0;
-    }
-
-    /* keep the clock nicely sized within the slide "plot area" */
-    .clock-container{
-      width: min(62%, 620px);
+    .clock-container {
+      width: min(92vmin, 98vw);
       aspect-ratio: 1 / 1;
     }
 
-    svg{
+    svg {
       width: 100%;
       height: 100%;
       overflow: visible;
-      display: block;
     }
 
-    /* Wedges: normal blend + transparency so overlaps read as new colors */
-    #hoursSlice { fill: var(--c-hours);   fill-opacity: 0.55; }
-    #minutesSlice { fill: var(--c-minutes); fill-opacity: 0.55; }
-    #secondsSlice { fill: var(--c-seconds); fill-opacity: 0.55; }
-
-    /* chart background */
-    #backgroundCircle{ fill: #ffffff; }
-
-    /* thinner divider lines on top */
-    .divider{
-      stroke: #ffffff;
-      stroke-width: 0.75;
-      stroke-linecap: round;
-      pointer-events: none;
+    /* Wedges: normal blend, semi-transparent so overlaps make new colors */
+    .slice {
+      /* no mix-blend-mode here */
     }
 
-    /* outside numbers */
-    text{
-      font-size: 12px;
+    /* Pure-ish RGB with some transparency */
+    #hoursSlice {
+      fill: cyan;      /* blue */
+     fill-opacity: 0.5;
+    }
+    #minutesSlice {
+      fill: magenta;      /* red */
+       mix-blend-mode: multiply;
+     fill-opacity: 0.5;
+    }
+    #secondsSlice {
+      fill: yellow;      /* green */
+      fill-opacity: 1;
+      mix-blend-mode: multiply;
+    }
+
+    text {
+      font-size: 12px;        /* slightly smaller */
       text-anchor: middle;
       dominant-baseline: middle;
       pointer-events: none;
-      fill: #000;
+      fill: #000000;          /* all numbers now black */
     }
 
-    .footer{
-      display: grid;
-      grid-template-columns: 1fr auto;
-      font-size: 10px;
-      color: #111;
-      opacity: 0.85;
+    #hoursLabel   { fill: #000; }
+    #minutesLabel { fill: #000; }
+    #secondsLabel { fill: #000; }
+
+    /* Chart background is white */
+    #backgroundCircle {
+      fill: #ffffff;
+    }
+
+    /* Foreground white divider lines on top of wedges */
+    .divider {
+      stroke: #ffffff;
+      stroke-width: 0.75;  /* thinner as requested */
+      stroke-linecap: round;
+      pointer-events: none;
     }
   </style>
 </head>
-
 <body>
-  <main class="slide" aria-label="slide">
-    <div class="topbar">
-      <h1 class="title">Time elapsed today</h1>
+  <div class="clock-container">
+    <svg viewBox="0 0 200 200">
+      <g id="pie" transform="translate(100,100)">
 
-      <div class="legend" aria-label="legend">
-        <div class="legend-item"><span class="swatch" style="background: var(--c-hours)"></span><span>Hours elapsed</span></div>
-        <div class="legend-item"><span class="swatch" style="background: var(--c-minutes)"></span><span>Minutes elapsed</span></div>
-        <div class="legend-item"><span class="swatch" style="background: var(--c-seconds)"></span><span>Seconds elapsed</span></div>
+        <!-- White chart background -->
+        <circle id="backgroundCircle" r="80"></circle>
 
-        <div class="legend-item"><span class="swatch" style="background: var(--c-hm)"></span><span>Hours + Minutes</span></div>
-        <div class="legend-item"><span class="swatch" style="background: var(--c-hs)"></span><span>Hours + Seconds</span></div>
-        <div class="legend-item"><span class="swatch" style="background: var(--c-ms)"></span><span>Minutes + Seconds</span></div>
-        <div class="legend-item"><span class="swatch" style="background: var(--c-hms)"></span><span>Hours + Minutes + Seconds</span></div>
-      </div>
-    </div>
+        <!-- Wedges -->
+        <path id="hoursSlice" class="slice"></path>
+        <path id="minutesSlice" class="slice"></path>
+        <path id="secondsSlice" class="slice"></path>
 
-    <div class="content">
-      <div class="clock-container">
-        <svg viewBox="0 0 200 200" role="img" aria-label="time elapsed clock">
-          <g id="pie" transform="translate(100,100)">
-            <circle id="backgroundCircle" r="80"></circle>
+        <!-- Foreground divider lines (always on top) -->
+        <line id="hourLine"   class="divider"></line>
+        <line id="minuteLine" class="divider"></line>
+        <line id="secondLine" class="divider"></line>
 
-            <path id="hoursSlice"></path>
-            <path id="minutesSlice"></path>
-            <path id="secondsSlice"></path>
+        <!-- Outside numbers -->
+        <text id="hoursLabel"></text>
+        <text id="minutesLabel"></text>
+        <text id="secondsLabel"></text>
 
-            <line id="hourLine" class="divider"></line>
-            <line id="minuteLine" class="divider"></line>
-            <line id="secondLine" class="divider"></line>
-
-            <text id="hoursLabel"></text>
-            <text id="minutesLabel"></text>
-            <text id="secondsLabel"></text>
-          </g>
-        </svg>
-      </div>
-    </div>
-
-    <div class="footer">
-      <div>RHODE ISLAND SCHOOL OF DESIGN</div>
-      <div>11</div>
-    </div>
-  </main>
+      </g>
+    </svg>
+  </div>
 
   <script>
     const radius = 80;
@@ -210,25 +124,35 @@
       if (Math.abs(sweep) < 0.0001) return "";
 
       const largeArc = sweep > Math.PI ? 1 : 0;
+
       const x1 = r * Math.cos(startAngle);
       const y1 = r * Math.sin(startAngle);
       const x2 = r * Math.cos(endAngle);
       const y2 = r * Math.sin(endAngle);
 
-      return `M 0 0 L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+      return `
+        M 0 0
+        L ${x1} ${y1}
+        A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}
+        Z
+      `;
     }
 
     function placeLabel(label, endAngle, r) {
-      const rr = r * labelDistance;
-      label.setAttribute("x", rr * Math.cos(endAngle));
-      label.setAttribute("y", rr * Math.sin(endAngle));
+      const labelRadius = r * labelDistance;
+      const x = labelRadius * Math.cos(endAngle);
+      const y = labelRadius * Math.sin(endAngle);
+      label.setAttribute("x", x);
+      label.setAttribute("y", y);
     }
 
     function placeLine(line, endAngle, r) {
+      const x = r * Math.cos(endAngle);
+      const y = r * Math.sin(endAngle);
       line.setAttribute("x1", 0);
       line.setAttribute("y1", 0);
-      line.setAttribute("x2", r * Math.cos(endAngle));
-      line.setAttribute("y2", r * Math.sin(endAngle));
+      line.setAttribute("x2", x);
+      line.setAttribute("y2", y);
     }
 
     function updateClock() {
@@ -240,12 +164,13 @@
       const rawHour12 = h24 % 12;
       const hourBase = rawHour12 === 0 ? 12 : rawHour12;
 
-      // Discrete/jumping wedges:
-      const hoursFraction   = rawHour12 / 12;
-      const minutesFraction = m / 60;
-      const secondsFraction = s / 60; // ticks each second
+      // *** CHANGED: discrete hours & minutes (no fractional movement) ***
+      const hoursFraction   = rawHour12 / 12;  // jumps only when hour changes
+      const minutesFraction = m / 60;          // jumps only when minute changes
+      const secondsFraction = s / 60;          // still ticks every second
 
       const baseAngle = -Math.PI / 2;
+
       const hEnd = baseAngle + hoursFraction   * Math.PI * 2;
       const mEnd = baseAngle + minutesFraction * Math.PI * 2;
       const sEnd = baseAngle + secondsFraction * Math.PI * 2;
@@ -254,15 +179,15 @@
       minutesSlice.setAttribute("d", sectorPath(baseAngle, mEnd, radius));
       secondsSlice.setAttribute("d", sectorPath(baseAngle, sEnd, radius));
 
-      placeLine(hourLine, hEnd, radius);
+      placeLine(hourLine,   hEnd, radius);
       placeLine(minuteLine, mEnd, radius);
       placeLine(secondLine, sEnd, radius);
 
-      placeLabel(hoursLabel, hEnd, radius);
+      placeLabel(hoursLabel,   hEnd, radius);
       placeLabel(minutesLabel, mEnd, radius);
       placeLabel(secondsLabel, sEnd, radius);
 
-      hoursLabel.textContent   = hourBase;
+      hoursLabel.textContent   = hourBase;                 // no leading 0
       minutesLabel.textContent = String(m).padStart(2, "0");
       secondsLabel.textContent = String(s).padStart(2, "0");
 
