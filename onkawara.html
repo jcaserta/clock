@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Today</title>
+  <style>
+    :root{
+      --bg:#070707;
+      --fg:#f4f4f4;
+      --fadeMs: 1400ms;
+    }
+    html,body{height:100%; margin:0;}
+    body{
+      background: var(--bg);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+
+    /* subtle “painted” ground (still reads as black) */
+    .stage{
+      width:min(92vw, 1200px);
+      aspect-ratio: 1 / 1;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      position:relative;
+      border-radius: 2px;
+      background:
+        radial-gradient(120% 120% at 50% 35%, rgba(255,255,255,0.035), rgba(0,0,0,0) 60%),
+        radial-gradient(140% 140% at 50% 75%, rgba(0,0,0,0), rgba(0,0,0,0.25) 65%),
+        linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.05));
+    }
+    .stage::after{
+      content:"";
+      position:absolute; inset:-30%;
+      background:
+        repeating-linear-gradient(0deg, rgba(255,255,255,0.012), rgba(255,255,255,0.012) 1px, rgba(0,0,0,0) 2px, rgba(0,0,0,0) 4px);
+      opacity:.25;
+      mix-blend-mode: overlay;
+      transform: rotate(2deg);
+      pointer-events:none;
+    }
+
+    svg{
+      width: 92%;
+      height: 92%;
+      display:block;
+    }
+
+    /* each stroke “arrives” */
+    .stroke{
+      fill: var(--fg);
+      opacity: 0;
+      transition: opacity 2200ms cubic-bezier(.22,.61,.36,1);
+      /* a tiny softness so it feels painted, not vector-crisp */
+      filter: drop-shadow(0 0 0.25px rgba(255,255,255,0.25));
+    }
+
+    /* optional: a little waviness per shape */
+    .stroke.rough{
+      filter:
+        drop-shadow(0 0 0.25px rgba(255,255,255,0.25))
+        url(#roughen);
+    }
+
+    /* minimal UI (hidden by default) */
+    .corner{
+      position:absolute;
+      inset:auto 14px 12px auto;
+      color: rgba(255,255,255,0.45);
+      font: 12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      letter-spacing: .02em;
+      user-select:none;
+    }
+    .corner button{
+      background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.8);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 999px;
+      padding: 6px 10px;
+      cursor:pointer;
+      margin-left: 8px;
+    }
+    .corner button:hover{ background: rgba(255,255,255,0.12); }
+
+    /* comment this out if you want the tiny reset UI visible */
+    .corner{ display:none; }
+  </style>
+</head>
+
+<body>
+  <div class="stage">
+    <svg id="art" viewBox="0 0 1000 1000" role="img" aria-label="Today painting">
+      <defs>
+        <!-- subtle roughening to mimic brush edge -->
+        <filter id="roughen" x="-20%" y="-20%" width="140%" height="140%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="1" seed="2" result="noise"/>
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="0.6" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+      </defs>
+
+      <rect x="0" y="0" width="1000" height="1000" fill="transparent"></rect>
+      <g id="strokes"></g>
+    </svg>
+
+    <div class="corner">
+      <span id="status"></span>
+      <button id="resetBtn" title="Start over">Reset</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // --- CONFIG YOU CAN TUNE LATER ---
+  const DURATION_MS = 60 * 60 * 1000;     // ~1 hour
+  const TARGET_WIDTH_RATIO = 0.90;        // date occupies ~90% of stage width
+  const LINE_HEIGHT = 150;               // glyph cap height in “font units”
+  const STROKE_THICK = 18;               // thickness of brush stroke
+  const TRACKING = 10;                   // spacing between glyphs (units)
+  const ROUGH_PROB = 0.55;               // chance a stroke gets a rough edge
+  // ---------------------------------
+
+  const svg = document.getElementById("art");
+  const g = document.getElementById("strokes");
+  const statusEl = document.getElementById("status");
+  const resetBtn = document.getElementById("resetBtn");
+
+  // Format date like On Kawara (English, uppercase month)
+  function formatToday() {
+    const d = new Date();
+    const months = ["JAN.","FEB.","MAR.","APR.","MAY","JUN.","JUL.","AUG.","SEP.","OCT.","NOV.","DEC."];
+    const mon = months[d.getMonth()];
+    const day = d.getDate(); // no leading zero
+    const year = d.getFullYear();
+    return `${mon} ${day}, ${year}`;
+  }
+
+  const dateStr = formatToday();
+  const storageKey = `kawara-progress:${dateStr}`;
+
+  // Optional reset by query string: ?reset=1
+  const url = new URL(location.href);
+  const forceReset = url.searchParams.get("reset") === "1";
+
+  // “Stroke font” builder:
+  // We build each glyph from a small set of strokes (rectangles/polygons).
+  // This stays sans-serif and serious, but each stroke is individually “painted.”
+  function rectStroke(x, y, w, h, jitter=0.9) {
+    // Slightly irregular rectangle via polygon
+    const j = () => (Math.random()*2-1)*jitter;
+    const pts = [
+      [x + j(),     y + j()],
+      [x+w + j(),   y + j()],
+      [x+w + j(),   y+h + j()],
+      [x + j(),     y+h + j()],
+    ];
+    return { type:"poly", pts };
+  }
+
+  function poly(pts) {
+    return { type:"poly", pts };
+  }
+
+  function glyph(char) {
+    // Glyph coordinate space:
+    // x: 0..ADV, y: 0..LINE_HEIGHT (top=0)
+    const t = STROKE_THICK;
+    const h = LINE_HEIGHT;
+    const mid = h*0.52;
+    const adv = 110; // default advance
+
+    const strokes = [];
+
+    const H = (x,y,w)=>strokes.push(rectStroke(x, y, w, t));
+    const V = (x,y,hh)=>strokes.push(rectStroke(x, y, t, hh));
+    const D = (x1,y1,x2,y2)=>{
+      // diagonal stroke as a quad polygon
+      const dx = x2-x1, dy=y2-y1;
+      const len = Math.hypot(dx,dy) || 1;
+      const nx = -dy/len, ny = dx/len;
+      const half = t/2;
+      strokes.push(poly([
+        [x1 + nx*half, y1 + ny*half],
+        [x2 + nx*half, y2 + ny*half],
+        [x2 - nx*half, y2 - ny*half],
+        [x1 - nx*half, y1 - ny*half],
+      ]));
+    };
+
+    switch(char){
+      // Letters for months (we implement A,B,C,D,E,F,G,H,I,J,L,M,N,O,P,R,S,T,U,V,Y)
+      case "A":
+        D(15,h, 55,0);
+        D(95,h, 55,0);
+        H(30, mid, 50);
+        return {adv, strokes};
+      case "B":
+        V(18,0,h);
+        H(18,0,55);
+        H(18,mid,55);
+        H(18,h-t,55);
+        // right “bowls”
+        V(70, t, mid - t);
+        V(70, mid + t*0.2, h - mid - t*1.2);
+        return {adv, strokes};
+      case "C":
+        H(20,0,70);
+        H(20,h-t,70);
+        V(20,t,h - 2*t);
+        return {adv, strokes};
+      case "D":
+        V(18,0,h);
+        H(18,0,60);
+        H(18,h-t,60);
+        V(78,t,h - 2*t);
+        return {adv, strokes};
+      case "E":
+        V(18,0,h);
+        H(18,0,75);
+        H(18,mid,60);
+        H(18,h-t,75);
+        return {adv, strokes};
+      case "F":
+        V(18,0,h);
+        H(18,0,75);
+        H(18,mid,55);
+        return {adv, strokes};
+      case "G":
+        H(20,0,75);
+        H(20,h-t,75);
+        V(20,t,h - 2*t);
+        H(55,mid,40);
+        V(80,mid, h - mid - t);
+        return {adv, strokes};
+      case "H":
+        V(18,0,h);
+        V(82,0,h);
+        H(18,mid,64);
+        return {adv, strokes};
+      case "I":
+        H(20,0,70);
+        H(20,h-t,70);
+        V(55,t,h - 2*t);
+        return {adv, strokes};
+      case "J":
+        H(20,0,70);
+        V(55,t,h - 2.3*t);
+        H(20,h-t,35);
+        V(20, h*0.62, h*0.38);
+        return {adv, strokes};
+      case "L":
+        V(18,0,h);
+        H(18,h-t,75);
+        return {adv, strokes};
+      case "M":
+        V(15,0,h);
+        V(95,0,h);
+        D(15,0,55,h*0.62);
+        D(95,0,55,h*0.62);
+        return {adv:120, strokes};
+      case "N":
+        V(18,0,h);
+        V(88,0,h);
+        D(18,0,88,h);
+        return {adv, strokes};
+      case "O":
+        H(22,0,66);
+        H(22,h-t,66);
+        V(22,t,h - 2*t);
+        V(88,t,h - 2*t);
+        return {adv, strokes};
+      case "P":
+        V(18,0,h);
+        H(18,0,62);
+        H(18,mid,62);
+        V(80,t, mid - t);
+        return {adv, strokes};
+      case "R":
+        V(18,0,h);
+        H(18,0,62);
+        H(18,mid,62);
+        V(80,t, mid - t);
+        D(50,mid, 90,h);
+        return {adv, strokes};
+      case "S":
+        H(22,0,66);
+        H(22,mid,66);
+        H(22,h-t,66);
+        V(22,t,mid - t);
+        V(88,mid + t*0.2, h - mid - t*1.2);
+        return {adv, strokes};
+      case "T":
+        H(18,0,75);
+        V(55,t,h - t);
+        return {adv, strokes};
+      case "U":
+        V(18,0,h - t);
+        V(88,0,h - t);
+        H(18,h-t,70);
+        return {adv, strokes};
+      case "V":
+        D(15,0,55,h);
+        D(95,0,55,h);
+        return {adv:120, strokes};
+      case "Y":
+        D(18,0,55,mid);
+        D(92,0,55,mid);
+        V(55,mid,h - mid);
+        return {adv, strokes};
+
+      // Digits
+      case "0":
+        return glyph("O");
+      case "1":
+        V(55,0,h);
+        H(35,0,40);
+        return {adv, strokes};
+      case "2":
+        H(22,0,66);
+        H(22,mid,66);
+        H(22,h-t,66);
+        V(88,t,mid - t);
+        V(22,mid + t*0.2, h - mid - t*1.2);
+        return {adv, strokes};
+      case "3":
+        H(22,0,66);
+        H(22,mid,66);
+        H(22,h-t,66);
+        V(88,t,h - 2*t);
+        return {adv, strokes};
+      case "4":
+        V(22,0,mid + t);
+        V(88,0,h);
+        H(22,mid,66);
+        return {adv, strokes};
+      case "5":
+        H(22,0,66);
+        H(22,mid,66);
+        H(22,h-t,66);
+        V(22,t,mid - t);
+        V(88,mid + t*0.2, h - mid - t*1.2);
+        return {adv, strokes};
+      case "6":
+        H(22,0,66);
+        H(22,mid,66);
+        H(22,h-t,66);
+        V(22,t,h - 2*t);
+        V(88,mid + t*0.2, h - mid - t*1.2);
+        return {adv, strokes};
+      case "7":
+        H(22,0,66);
+        D(88,0,35,h);
+        return {adv, strokes};
+      case "8":
+        H(22,0,66);
+        H(22,mid,66);
+        H(22,h-t,66);
+        V(22,t,h - 2*t);
+        V(88,t,h - 2*t);
+        return {adv, strokes};
+      case "9":
+        H(22,0,66);
+        H(22,mid,66);
+        H(22,h-t,66);
+        V(22,t,mid - t);
+        V(88,t,h - 2*t);
+        return {adv, strokes};
+
+      // Punctuation / space
+      case ".":
+        strokes.push(rectStroke(48, h - t*1.2, t*1.05, t*1.05, 0.6));
+        return {adv:55, strokes};
+      case ",":
+        strokes.push(rectStroke(48, h - t*1.2, t*1.05, t*1.05, 0.6));
+        strokes.push(poly([[52,h - t*0.2],[65,h + t*1.2],[48,h + t*1.2]]));
+        return {adv:60, strokes};
+      case " ":
+        return {adv:45, strokes:[]};
+
+      default:
+        // fallback: a blank box width
+        return {adv:adv, strokes:[]};
+    }
+  }
+
+  // Build the full stroke list for the date string
+  function buildStrokesForText(text) {
+    const chars = [...text];
+    // Build in “font units”
+    let x = 0;
+    const all = [];
+
+    for (const ch of chars) {
+      const g = glyph(ch);
+      for (const s of g.strokes) {
+        // shift stroke by glyph x offset
+        const shifted = JSON.parse(JSON.stringify(s));
+        if (shifted.type === "poly") {
+          shifted.pts = shifted.pts.map(([px,py]) => [px + x, py]);
+        }
+        all.push(shifted);
+      }
+      x += g.adv + TRACKING;
+    }
+
+    return {strokes: all, width: x - TRACKING};
+  }
+
+  const built = buildStrokesForText(dateStr);
+
+  // Place centered in the 1000x1000 stage, scaled to ~90% width
+  function layoutTransform() {
+    const vw = built.width;
+    const vh = LINE_HEIGHT;
+
+    const targetW = 1000 * TARGET_WIDTH_RATIO;
+    const scale = targetW / vw;
+
+    const x0 = (1000 - vw*scale) / 2;
+    const y0 = (1000 - vh*scale) / 2;
+
+    return { scale, x0, y0 };
+  }
+
+  const { scale, x0, y0 } = layoutTransform();
+
+  // Create SVG elements for every stroke (hidden initially)
+  const strokeEls = [];
+  function renderAllStrokes() {
+    g.innerHTML = "";
+    strokeEls.length = 0;
+
+    for (let i=0; i<built.strokes.length; i++) {
+      const s = built.strokes[i];
+
+      const el = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+      const pts = s.pts.map(([px,py]) => `${(px*scale + x0).toFixed(2)},${(py*scale + y0).toFixed(2)}`).join(" ");
+      el.setAttribute("points", pts);
+      el.setAttribute("class", "stroke" + (Math.random() < ROUGH_PROB ? " rough" : ""));
+      el.dataset.idx = String(i);
+      g.appendChild(el);
+      strokeEls.push(el);
+    }
+  }
+
+  // Progress persistence: start time recorded per date painting.
+  function loadState() {
+    if (forceReset) return null;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed.startMs !== "number") return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveState(state) {
+    try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch {}
+  }
+
+  function clearState() {
+    try { localStorage.removeItem(storageKey); } catch {}
+  }
+//below is for testing; remove to allow only one per day
+const TEST_RESTART_EACH_LOAD = true;
+
+  let state = loadState();
+  if (!state) {
+    state = { startMs: Date.now() };
+    saveState(state);
+  }
+
+  // Reveal strokes according to elapsed time
+const totalStrokes = built.strokes.length;
+
+// Reveal one stroke every fixed interval
+const interval = DURATION_MS / totalStrokes;
+
+let revealed = 0;
+
+function tick() {
+
+  const now = Date.now();
+
+  // calculate how many strokes SHOULD be visible
+  const target = Math.floor((now - state.startMs) / interval);
+
+  // reveal missing strokes immediately
+  while (revealed < target && revealed < totalStrokes) {
+    strokeEls[revealed].style.opacity = "1";
+    revealed++;
+  }
+
+  requestAnimationFrame(tick);
+}
+  // Reset button
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      clearState();
+      state = { startMs: Date.now() };
+      saveState(state);
+      // hide all, then restart reveal
+      strokeEls.forEach(el => (el.style.opacity = "0"));
+      lastShown = -1;
+    });
+  }
+
+  renderAllStrokes();
+  // Immediately reveal if revisiting mid-progress
+const already = Math.floor((Date.now() - state.startMs) / interval);
+
+for (let i = 0; i < already && i < totalStrokes; i++) {
+  strokeEls[i].style.opacity = "1";
+}
+
+revealed = already;
+
+  tick();
+})();
+</script>
+</body>
+</html>

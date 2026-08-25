@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Infinite Pattern Scroll (Dense)</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #f5f4f1;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: grab;
+    }
+    canvas:active { cursor: grabbing; }
+  </style>
+</head>
+<body>
+  <canvas id="pattern"></canvas>
+
+  <script>
+    const canvas = document.getElementById('pattern');
+    const ctx = canvas.getContext('2d');
+
+    let width, height, dpr;
+
+    // tighter spacing
+    const CELL = 56;        // reduced from 96
+    const STROKE = 7;       // slightly heavier
+    const ARM = 22;         // longer relative to cell
+    const DIAG = 20;
+
+    let offsetX = 0;
+    let offsetY = 0;
+
+    function hash2D(x, y) {
+      let n = x * 374761393 + y * 668265263;
+      n = (n ^ (n >> 13)) * 1274126177;
+      n = n ^ (n >> 16);
+      return (n >>> 0) / 4294967295;
+    }
+
+    function resize() {
+      dpr = Math.max(1, window.devicePixelRatio || 1);
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      draw();
+    }
+
+    function line(cx, cy, angle, len) {
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(angle) * len, cy + Math.sin(angle) * len);
+    }
+
+    function drawMotif(px, py, gx, gy) {
+      const r = hash2D(gx, gy);
+      const cx = px + CELL / 2;
+      const cy = py + CELL / 2;
+
+      ctx.beginPath();
+
+      // core cross (connective backbone)
+      line(cx, cy, 0, ARM);
+      line(cx, cy, Math.PI, ARM);
+      line(cx, cy, Math.PI/2, ARM);
+      line(cx, cy, -Math.PI/2, ARM);
+
+      // diagonals
+      if (r > 0.2) line(cx, cy, Math.PI/4, DIAG);
+      if (r > 0.4) line(cx, cy, -Math.PI/4, DIAG);
+      if (r > 0.6) line(cx, cy, 3*Math.PI/4, DIAG);
+      if (r > 0.8) line(cx, cy, -3*Math.PI/4, DIAG);
+
+      ctx.stroke();
+
+      // SECONDARY OFFSET LINES to create interlocking feel
+      const shift = CELL * 0.35;
+
+      ctx.beginPath();
+      if (r > 0.3) {
+        line(cx - shift, cy, 0, ARM * 0.6);
+        line(cx + shift, cy, Math.PI, ARM * 0.6);
+      }
+      if (r > 0.5) {
+        line(cx, cy - shift, Math.PI/2, ARM * 0.6);
+        line(cx, cy + shift, -Math.PI/2, ARM * 0.6);
+      }
+      ctx.stroke();
+
+      // occasional polygon clusters (denser grouping)
+      if (hash2D(gx + 10, gy + 20) > 0.85) {
+        ctx.beginPath();
+        const sides = 6;
+        const radius = CELL * 0.45;
+        for (let i = 0; i < sides; i++) {
+          const a = (i / sides) * Math.PI * 2;
+          const x = cx + Math.cos(a) * radius;
+          const y = cy + Math.sin(a) * radius;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      }
+    }
+
+    function draw() {
+      ctx.fillStyle = '#f5f4f1';
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.strokeStyle = '#111';
+      ctx.lineWidth = STROKE;
+      ctx.lineCap = 'butt';
+
+      const startCol = Math.floor(offsetX / CELL) - 2;
+      const startRow = Math.floor(offsetY / CELL) - 2;
+      const endCol = startCol + Math.ceil(width / CELL) + 4;
+      const endRow = startRow + Math.ceil(height / CELL) + 4;
+
+      for (let row = startRow; row < endRow; row++) {
+        for (let col = startCol; col < endCol; col++) {
+          const x = col * CELL - offsetX;
+          const y = row * CELL - offsetY;
+          drawMotif(x, y, col, row);
+        }
+      }
+    }
+
+    function panBy(dx, dy) {
+      offsetX += dx;
+      offsetY += dy;
+      draw();
+    }
+
+    window.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      panBy(e.deltaX, e.deltaY);
+    }, { passive: false });
+
+    let dragging = false;
+    let lx = 0, ly = 0;
+
+    canvas.addEventListener('pointerdown', e => {
+      dragging = true;
+      lx = e.clientX;
+      ly = e.clientY;
+      canvas.setPointerCapture(e.pointerId);
+    });
+
+    canvas.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      const dx = e.clientX - lx;
+      const dy = e.clientY - ly;
+      lx = e.clientX;
+      ly = e.clientY;
+      panBy(-dx, -dy);
+    });
+
+    canvas.addEventListener('pointerup', () => dragging = false);
+    canvas.addEventListener('pointerleave', () => dragging = false);
+
+    window.addEventListener('resize', resize);
+    resize();
+  </script>
+</body>
+</html>
