@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pixel Clock — 15×15 with empty border</title>
 <style>
-  :root { --grid:17; --tick:#333; --ink:#ccc; --sec:#f00; --bg:#000; }
+  :root { --grid:17; --tick:#222; --ink:#aaa; --sec:#f00; --bg:#000; }
   html,body { margin:0; height:100%; overflow:hidden; background:var(--bg); }
   .viewport { width:100vw; height:100vh; display:grid; place-items:center; }
   .stage { position:relative; width:100vh; height:100vh; }
@@ -35,7 +35,7 @@
 (() => {
   const G=15, BORDER=1, TOTAL=17;
   const CX=Math.floor(G/2), CY=Math.floor(G/2);
-  const MAXR=Math.floor(G/2);
+  const MAXR=Math.floor(G/2)-1;
   const ticksEl=document.getElementById('ticks');
   const handsEl=document.getElementById('hands');
   const secondsEl=document.getElementById('seconds');
